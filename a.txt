@@ -1,0 +1,706 @@
+# 5 "system/gui/../currency.hpp"
+int _str_digit_to_int_(std::string str){
+    str.erase(std::remove_if(str.begin(),str.end(),
+    [](unsigned char c)
+    {
+        return !std::isdigit(c);
+    }
+    ));
+    size_t pos;
+    return std::stoi(str.c_str(),&pos);
+}
+void _str_to_currency(std::string& str){
+    if(str.find(',')==std::string::npos){
+        str+=",00";
+    }
+}
+struct currency{
+    int value=0;
+    int real=0;
+    int cent=0;
+    currency(std::string initial_value){
+        value = _str_digit_to_int_(initial_value);
+        real = value/100;
+        cent = value-real*100;
+    };
+    currency(int initial_value):value(initial_value){
+        real = value/100;
+        cent = value-real*100;
+    };
+
+    void add(int other_value){
+        currency _temp_c(other_value);
+        real+=_temp_c.real;
+        cent+=_temp_c.cent;
+        if(cent>99){
+            real++;
+            cent-=100;
+        }
+    }
+    void reset(){value=real=cent=0;}
+};
+# 6 "system/gui/../product.hpp" 2
+# 1 "system/gui/../gui/extend.hpp" 1
+       
+struct SYSTEM_GUI_EXTENSION{
+    bool is_selected = false;
+};
+# 7 "system/gui/../product.hpp" 2
+
+extern time_t now;
+
+struct product: SYSTEM_GUI_EXTENSION{
+    static int s_counter;
+    int id = 0;
+    std::string name;
+    std::string _validate;
+    int _quantity = 1;
+    std::string _price;
+    std::string type;
+    bool is_valid = true;
+
+    void check_validate();
+
+    static std::vector<product> storage;
+    static void store(std::string name, std::string validate, int quantity,std::string price,std::string category);
+
+    int sell_quantity=1;
+
+    product (std::string name, std::string validate, int quantity, std::string price, std::string category):_validate(validate),_quantity(quantity){
+        std::replace(name.begin(),name.end(),'_',' ');
+        this->name = name;
+        _price = price;
+        _str_to_currency(_price);
+        if(_price.compare("R$")==0)
+            _price+="R$";
+        id = s_counter;
+        s_counter++;
+    }
+    product* ptr(){
+        return this;
+    }
+};
+int product::s_counter = 0;
+std::vector<product> product::storage;
+void product::store(std::string name, std::string validate, int quantity, std::string price, std::string category){
+    storage.push_back(product(name,validate,quantity,price,category));
+}
+void product::check_validate(){
+    if(_validate=="*") return;
+    tm __validate={0};
+    str_to_tm(_validate.c_str(),&__validate);
+    is_valid = now<=mktime(&__validate);
+}
+# 6 "system/gui/../disk.hpp" 2
+
+void load(){
+    std::ifstream data("data.txt");
+    if(data.is_open()){
+        std::string line;
+        std::string name,validate,price;
+        int quantity;
+        while(std::getline(data,line)){
+            std::istringstream stream(line);
+            stream >> name;
+            stream >> quantity;
+            stream >> price;
+            stream >> validate;
+            product::store(name,validate,quantity,price,"A");
+        }
+    }
+    data.close();
+}
+void save(){
+    std::ofstream data("data.txt");
+    if(data.is_open()){
+        for(const auto&p:product::storage){
+            std::string name = p.name;
+            std::replace(name.begin(),name.end(),' ', '_');
+            data << name << " " << p._quantity << " " << p._price << " " << p._validate << p.type << "\n";
+        }
+    }
+    data.close();
+}
+# 8 "system/gui/add_panel.hpp" 2
+# 1 "system/gui/../category.hpp" 1
+       
+
+
+
+
+struct Category{
+    ImVec4 color;
+    std::string name;
+    std::vector<product*> products;
+    static std::vector<Category> categories;
+    Category(std::string name, ImVec4 color, const std::vector<int> idxs):name(name),color(color){
+        for(const auto X:idxs){
+            products.push_back(&product::storage[X]);
+        }
+        for(const auto X:products)
+            std::printf("%d",X->name);
+    }
+};
+std::vector<Category> Category::categories;
+# 9 "system/gui/add_panel.hpp" 2
+
+extern ImFont *SYSTEM_FONT_DEFAULT,
+              *SYSTEM_FONT_ITALIC;
+static bool _is_input_valid();
+static void _reset_input_values();
+static int _text_input_callback(ImGuiInputTextCallbackData* data);
+static int _price_input_callback(ImGuiInputTextCallbackData* data);
+static bool enable_validate=true;
+static bool initialised = true;
+    static std::string edit_validate;
+void _DRAW_MAIN_ADD_PANEL_(product* PRODUCT = nullptr){
+    if(PRODUCT!=nullptr&&initialised){
+        edit_validate.clear();
+        enable_validate = PRODUCT->_validate.compare("*");
+        if(enable_validate)
+            edit_validate = PRODUCT->_validate;
+        initialised = false;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,ImVec4(0.2,0.2,0.2,1));
+
+    ImGui::Text("NOME: ","");
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(150);
+    ImGui::PushFont(SYSTEM_FONT_ITALIC);
+    ImGui::InputTextWithHint("##input(product_name)","DIGITE O NOME DO PRODUTO",PRODUCT!=nullptr?&PRODUCT->name:&product_name,ImGuiInputTextFlags_CharsUppercase);
+
+
+    const char *items[3] = {"SABONETE","PERFUME","HIDRATANTE"};
+    static int s;
+    ImGui::SameLine();
+    ImGui::Combo("CATEGORIA",&s,items,3);
+
+    ImGui::PopFont();
+
+    static float X_INPUT = 0;
+
+    if(ImGui::Checkbox("##enable",&enable_validate));
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!enable_validate);
+    ImGui::Text("VALIDADE: ");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize("00/00/00000").x+9);
+    ImGui::SetCursorPosX(X_INPUT);
+    ImGui::PushFont(SYSTEM_FONT_ITALIC);
+    ImGui::InputTextWithHint("##input(validate)","DD/MM/AAAA",PRODUCT!=nullptr?&edit_validate:&validate,ImGuiInputTextFlags_CharsDecimal|ImGuiInputTextFlags_CallbackEdit,_text_input_callback, (void*)&validate);
+    ImGui::PopFont();
+    ImGui::EndDisabled();
+    if(enable_validate)
+    {
+        tm ___test_date_vality;
+        str_to_tm(PRODUCT!=nullptr?edit_validate:validate,&___test_date_vality);
+        if((PRODUCT!=nullptr?edit_validate:validate).length()!=0){
+            ImGui::SameLine();
+            std::string warning;
+            switch(is_str_date_valid(PRODUCT!=nullptr?edit_validate:validate)){
+                case -4:
+                    warning = "...";
+                    break;
+                case -1:
+                    warning = "dia inválido";
+                    break;
+                case -2:
+                    warning = "mês inválido";
+                    break;
+                case -3:
+                    warning = "ano invalido";
+                    break;
+                case -5:
+                    warning = "data expirada";
+                    break;
+                case 0:{
+                    if(PRODUCT!=nullptr){
+                        PRODUCT->_validate = edit_validate;
+                    }
+                }
+                break;
+            }
+            ImGui::Text("%s",warning.c_str());
+        }
+    }
+    else if(PRODUCT!=nullptr){
+        PRODUCT->_validate = "*";
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(30,0));
+
+
+                   if(quantity<1) quantity=1;
+    ImGui::Text("QUANTIDADE: ");
+    X_INPUT = ImGui::GetItemRectSize().x+30;
+    ImGui::PopStyleVar();
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(X_INPUT);
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize("000").x+120);
+    ImGui::InputInt("##input(quantity)",PRODUCT!=nullptr?&PRODUCT->_quantity:&quantity,1,1,ImGuiInputTextFlags_CharsDecimal);
+
+    ImGui::Text("PREÇO:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    ImGui::SetCursorPosX(X_INPUT);
+    ImGui::InputText("R$",PRODUCT!=nullptr?&PRODUCT->_price:&price,ImGuiInputTextFlags_CallbackEdit,_price_input_callback);
+    if(PRODUCT!=nullptr) _str_to_currency(PRODUCT->_price);
+
+    ImGui::BeginDisabled(!_is_input_valid());
+    if(!PRODUCT)
+        if(ImGui::Button("+ADICIONAR PRODUTO(S)")){
+            product::store(product_name,enable_validate?validate:"*",quantity,price,"SABONETE");
+            save();
+        }
+    ImGui::EndDisabled();
+
+    ImGui::Text("%s",getDateNow().c_str());
+
+    ImGui::PopStyleColor();
+}
+
+bool _is_input_valid(){
+    if((enable_validate?is_str_date_valid(validate)==0:true)&&!product_name.empty()&&!price.empty())
+        return true;
+    return false;
+}
+
+void _reset_input_values(){
+    validate.clear();
+    product_name.clear();
+    quantity = 1;
+}
+
+int _text_input_callback(ImGuiInputTextCallbackData* data){
+    bool erase = ImGui::IsKeyPressed(ImGuiKey_Backspace);
+    int &pos = data->CursorPos;
+    for(int i = 0; i < data->BufTextLen; i++){
+        if(i==2||i==5){
+            data->InsertChars(i,"/");
+            continue;
+        }
+        if(data->Buf[i]=='/'){
+            data->DeleteChars(i,1);
+        }
+    }
+    if(data->BufTextLen>10) data->DeleteChars(10,1);
+    return 0;
+}
+
+int _price_input_callback(ImGuiInputTextCallbackData* data){
+    int comma_occurence=0;
+    int comma_pos = 0;
+    for(int i = 0; i < data->BufTextLen; i++)
+    {
+        comma_occurence+=data->Buf[i]==',';
+        if(data->Buf[i]==',')
+            comma_pos=i;
+
+
+
+    }
+        std::printf("%d\n",comma_pos);
+    return 0;
+}
+# 5 "system/gui/table.hpp" 2
+# 1 "system/gui/category_panel.hpp" 1
+       
+
+
+
+
+
+bool get_product_from_database(void *data, int idx, const char **out_text){
+    product *p = (product*)data;
+    *out_text = p[idx].name.c_str();
+    return true;
+}
+void _DRAW_CREATE_CATEGORY_PANEL_(){
+    static std::string name;
+    static std::vector<int> idxs;
+    static float color[3] = {255,255,255};
+    ImGui::Text("NOME:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(300);
+    ImGui::InputText("##name",&name,ImGuiInputTextFlags_CharsUppercase);
+    ImGui::SameLine();
+    ImGui::ColorEdit3("DESTAQUE",color,ImGuiColorEditFlags_HDR|ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_PickerHueWheel);
+    static int s;
+    ImGui::Text("SELECIONE");
+    ImGui::SameLine();
+    ImGui::Combo("##selecione",&s,get_product_from_database,product::storage.data(),product::storage.size());
+    ImGui::SameLine();
+    if(ImGui::Button(" + ")){
+        idxs.push_back(s);
+    }
+    for(const int IDX:idxs){
+        ImGui::Text(product::storage[IDX].name.c_str());
+    }
+    if(ImGui::Button("+CRIAR CATEGORIA")){
+        Category::categories.push_back(Category(name,ImVec4(color[0],color[1],color[2],1),idxs));
+        idxs.clear();
+    }
+}
+# 6 "system/gui/table.hpp" 2
+static std::string search;
+static std::vector<product> search_result;
+std::vector<product*> selected;
+
+ImVec4 modImVec4(const ImVec4 &base, const float mod, const bool change_only_alpha = false){
+    return change_only_alpha?ImVec4(base.x,base.y,base.z,1.f*mod):ImVec4(base.x*mod,base.y*mod,base.z*mod,1);
+}
+
+void _DRAW_MAIN_TABLE_(){
+
+    static product* product_edit = nullptr;
+    selected.clear();
+
+    ImGui::Begin("ESTOQUE");
+
+
+    ImGui::InputTextWithHint("##search","PROCURAR PRODUTO",&search,ImGuiInputTextFlags_CharsUppercase);
+    for(const product& meta:product::storage){
+        if(meta.name.find(search)!=std::string::npos)
+            search_result.push_back(meta);
+    }
+
+    ImGui::SameLine();
+    if(SYSTEM_STATE==NO_OPERATION)
+    {
+        if(ImGui::Button("INICIAR VENDA"))
+            SYSTEM_STATE = SELL;
+    }
+    else if(SYSTEM_STATE==SELL)
+        if(ImGui::Button("CANCELAR"))
+            SYSTEM_STATE = NO_OPERATION;
+    if(ImGui::Button("+ADICIONAR PRODUTO")){
+        ImGui::OpenPopup("ADICIONAR");
+    }
+    if(ImGui::BeginPopupModal("ADICIONAR")){
+        _DRAW_MAIN_ADD_PANEL_();
+         if (ImGui::Button("FECHAR"))
+                ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine();
+    if(ImGui::Button("+CRIAR CATEGORIA")){
+        ImGui::OpenPopup("CRIAR CATEGORIA");
+    }
+    if(ImGui::BeginPopupModal("CRIAR CATEGORIA")){
+        _DRAW_CREATE_CATEGORY_PANEL_();
+        if(ImGui::Button("FECHAR"))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    ImGui::Separator();
+
+    static unsigned int option_view=0;
+    int _ITR_ = 0;
+    ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0,0,0));
+    for(auto const view:{"TABELA","CATEGORIA","REMESSAS"}){
+        ImGui::BeginDisabled(option_view==_ITR_);
+        if(ImGui::Button(view)){
+            option_view=_ITR_;
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        _ITR_++;
+    }
+    ImGui::PopStyleColor();
+    ImGui::Text("%d",option_view);
+
+    if(option_view==0){
+
+
+    static bool filter_out_of_stock = false;
+    static bool filter_expired = false;
+    if(ImGui::TreeNodeEx("FILTRO")){
+        ImGui::Checkbox("ESGOTADO",&filter_out_of_stock);
+        ImGui::Checkbox("VENCIDO",&filter_expired);
+        ImGui::TreePop();
+    }
+
+
+    if(ImGui::BeginChild("TABLE")){
+        ImGui::BeginTable("##mytable",4,ImGuiTableFlags_Resizable|ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersH);
+
+        ImGui::TableSetupColumn("PRODUTOS");
+        ImGui::TableSetupColumn("QUANTIDADE");
+        ImGui::TableSetupColumn("PREÇO");
+        ImGui::TableSetupColumn("VALIDADE");
+
+        ImGui::TableHeadersRow();
+        int _ITR_ = 0;
+
+        for(const auto& meta:product::storage){
+            if(meta.is_selected){
+                selected.push_back(&product::storage[meta.id]);
+            }
+        }
+
+        for(product& meta:!search.empty()?search_result:product::storage)
+        {
+            bool OUT_OF_STOCK = meta._quantity<=0;
+            meta.check_validate();
+            bool INVALID = !meta.is_valid||OUT_OF_STOCK;
+
+            if(SYSTEM_STATE==SELL&&INVALID)
+                continue;
+
+            if(filter_expired&&filter_out_of_stock){
+                if(meta.is_valid&&!OUT_OF_STOCK)
+                    continue;
+            }else{
+                if(filter_expired&&meta.is_valid)
+                    continue;
+                if(filter_out_of_stock&&!OUT_OF_STOCK)
+                    continue;
+            }
+
+            ImGui::TableNextColumn();
+
+            if(INVALID){
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered,ImVec4(1,0.2,0,0.2));
+                ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,0.2,0,1));
+            }
+
+                if(ImGui::Selectable(meta.name.c_str(),&product::storage[meta.id].is_selected,ImGuiSelectableFlags_SpanAllColumns)){
+                    product_edit = &meta;
+                    if(SYSTEM_STATE!=SELL){
+                        ImGui::OpenPopup("EDITAR");
+                        initialised = true;
+                    }
+                }
+                if(SYSTEM_STATE!=SELL)
+                    meta.is_selected = false;
+
+
+                if(INVALID){
+                    ImGui::SameLine();
+                    ImGui::Image(warning3_icon,icon_size());
+                }
+
+            ImGui::TableNextColumn();
+            if(meta.is_selected){
+                ImGui::Text("%d >",meta._quantity);
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0,1,0,1),"%d",meta._quantity-meta.sell_quantity);
+            }
+            else{
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(0,0));
+                ImGui::BeginChildFrame(ImGuiID(_ITR_+1),ImVec2(ImGui::GetColumnWidth(2),ImGui::GetFontSize()),ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoBackground);
+                ImGui::Text(OUT_OF_STOCK?"ESGOTADO":"%d",meta._quantity);
+                ImGui::EndChildFrame();
+                ImGui::PopStyleVar();
+            }
+
+            if(SYSTEM_STATE!=SELL){
+                static bool capture = true;
+                static int captured_at = -1;
+                static int temp = 0;
+                if(temp<0)temp=0;
+                if(ImGui::BeginPopupContextItem(std::to_string(_ITR_).append("_popup").c_str())){
+                    ImGui::SetNextItemWidth(150);
+                    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,1,1,1));
+                    ImGui::InputInt("##EDITAR QUANTIDADE",&temp,1,1,ImGuiInputTextFlags_CharsDecimal);
+                    ImGui::SameLine();
+                    if(ImGui::Button("EDITAR")){
+                        meta._quantity = temp;
+                        SYSTEM_STATE = UPDATE;
+                    }
+                    ImGui::PopStyleColor();
+                    ImGui::EndPopup();
+                    if(capture){
+                        temp = meta._quantity;
+                        captured_at = _ITR_;
+                        capture = false;
+                    }
+                }else if(captured_at==_ITR_)
+                    capture=true;
+            }
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%s",meta._price.c_str());
+
+            ImGui::TableNextColumn();
+            ImGui::PushFont(SYSTEM_FONT_ITALIC);
+            ImGui::Text("%s",meta._validate.c_str());
+            ImGui::PopFont();
+
+            if(INVALID)
+                ImGui::PopStyleColor(2);
+            _ITR_++;
+        }
+
+        if(ImGui::BeginPopupModal("EDITAR")){
+            _DRAW_MAIN_ADD_PANEL_(product_edit);
+            if(ImGui::Button("DELETAR PRODUTO")){
+                product::storage.erase(product::storage.begin()+product_edit->id);
+                ImGui::CloseCurrentPopup();
+                save();
+            }
+            if(ImGui::Button("FECHAR")){
+                ImGui::CloseCurrentPopup();
+                save();
+            }
+            ImGui::EndPopup();
+        }
+
+    ImGui::EndTable();
+    }
+    ImGui::EndChild();
+    }
+    else if(option_view==1){
+        for(auto const c:Category::categories){
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered,modImVec4(c.color,0.3f,true));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive,modImVec4(c.color,0.4f,true));
+            ImGui::PushStyleColor(ImGuiCol_Tab,modImVec4(c.color,0.4f,true));
+            if(ImGui::TreeNode(c.name.c_str())){
+                for(auto const p:c.products){
+                    ImGui::Text("%s",p->name.c_str());
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopStyleColor(3);
+        }
+    }
+    ImGui::End();
+
+    search_result.clear();
+}
+# 11 "main.cpp" 2
+# 1 "system/gui/sell_panel.hpp" 1
+
+
+
+
+
+extern std::vector<product*> selected;
+static bool MERGE_CHANGES(0);
+static int affected_items;
+void _DRAW_MAIN_SELL_PANEL_(){
+
+    ImGui::Begin("OPERAR VENDA");
+    if(SYSTEM_STATE!=SELL){
+        ImGui::TextWrapped("PARA USAR OS RECURSOS DESSA JANELA, INICIE A VENDA");
+        ImGui::SameLine();
+        ImGui::Image(warning1_icon,icon_size());
+    }
+    else{
+        static int real = 0, cent = 0;
+
+        ImGui::PushFont(SYSTEM_FONT_ITALIC);
+        ImGui::Text("VALOR A PAGAR ");
+        ImGui::SameLine();
+        ImGui::PopFont();
+
+        ImGui::PushFont(SYSTEM_FONT_ITALIC_BIG);
+        ImGui::TextColored(ImVec4(0,1,0,1),"%d,%dR$",real,cent);
+        ImGui::PopFont();
+        ImGui::Separator();
+
+        currency total(0);
+
+        if(ImGui::BeginChild(ImGuiID(1),ImVec2(0,-60),true)){
+            ImGui::BeginTable("##sell",2);
+            ImGui::TableSetupColumn("PRODUTO");
+            ImGui::TableSetupColumn("QUANTIDADE");
+            ImGui::TableHeadersRow();
+            int _ITR_ = 0;
+            for(auto &item:selected){
+                if(item->_quantity>0){
+                    ImGui::TableNextColumn();
+                    for(int q = 0; q < item->sell_quantity; q++)
+                        total.add(_str_digit_to_int_(item->_price));
+
+                    ImGui::Text("%s",item->name.c_str());
+
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(ImVec4(0,1,0,1),"%d",item->_quantity);
+                    ImGui::SameLine(54);
+                    ImGui::Text("/",item->_quantity);
+                    ImGui::SameLine(81);
+                    ImGui::SetNextItemWidth(150);
+                    ImGui::InputInt((std::string("##_sell_quantity_")+std::to_string(_ITR_)).c_str(),&item->sell_quantity);
+                    if(item->sell_quantity>item->_quantity)
+                        item->sell_quantity=item->_quantity;
+                    else if(item->sell_quantity<1)
+                        item->sell_quantity = 1;
+                    _ITR_++;
+                    if(MERGE_CHANGES){
+                        item->_quantity-=item->sell_quantity;
+                    }
+                }
+            }
+            ImGui::EndTable();
+        }
+        ImGui::EndChild();
+
+        if(MERGE_CHANGES){
+            SYSTEM_STATE = UPDATE;
+            MERGE_CHANGES = 0;
+        }
+        if(ImGui::Button("FINALIZAR")){
+            MERGE_CHANGES = 1;
+        }
+
+        real = total.real;
+        cent = total.cent;
+    }
+    ImGui::End();
+}
+int SDL_main(int argc, char *argv[]){
+    load();
+    time(&now);
+
+    nano window;
+    warning3_icon = IMG_LoadTexture(window.p_renderer,"warning-5-512.png");
+    warning1_icon = IMG_LoadTexture(window.p_renderer,"warning-3-512.png");
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+
+    SYSTEM_FONT_DEFAULT = io.Fonts->AddFontFromFileTTF("GoldbillXlLight-VG7zx.otf",27.f);
+    SYSTEM_FONT_ITALIC = io.Fonts->AddFontFromFileTTF("GoldbillXlLightItalic-JREJo.otf",27.f);
+    SYSTEM_FONT_ITALIC_BIG = io.Fonts->AddFontFromFileTTF("GoldbillXlLightItalic-JREJo.otf",45.f);
+
+    ImGui_ImplSDL2_InitForSDLRenderer(window.p_window,window.p_renderer);
+    ImGui_ImplSDLRenderer_Init(window.p_renderer);
+
+    ImGui::GetStyle().Colors[ImGuiCol_TitleBgActive]=ImVec4(0,0,0,1);
+    ImGui::GetStyle().Colors[ImGuiCol_TableRowBg]=ImVec4(0.05f,0.05f,0.05f,255);
+    ImGui::GetStyle().Colors[ImGuiCol_TableRowBgAlt]=ImVec4(0,0,0,1);
+    ImGui::GetStyle().Colors[ImGuiCol_Button]=ImVec4(1,0.2f,0,0.81f);
+    ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered]=ImVec4(1,0.1f,0,0.6f);
+    ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]=ImVec4(1,0.1f,0,0.6f);
+    ImGui::GetStyle().Colors[7] = ImVec4(0.1f,0.1f,0.1f,1);
+    ImGui::GetStyle().Colors[25] = ImVec4(1.f,0.2f,0.1f,1);
+    ImGui::GetStyle().Colors[24] = ImVec4(1,0.1f,0,0.3f);
+    ImGui::GetStyle().Colors[26] = ImVec4(1,0.1f,0,0.6f);
+    ImGui::GetStyle().Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(1,0.2,0.2,0.1);
+
+    while(window.p_window){
+        window.process(&ImGui_ImplSDL2_ProcessEvent);
+
+        ImGui_ImplSDLRenderer_NewFrame();
+        ImGui_ImplSDL2_NewFrame(window.p_window);
+
+        ImGui::NewFrame();
+
+        _DRAW_MAIN_TABLE_();
+        _DRAW_MAIN_SELL_PANEL_();
+
+        if(SYSTEM_STATE == UPDATE){
+            save();
+            SYSTEM_STATE = NO_OPERATION;
+        }
+
+        ImGui::Render();
+        ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
+
+        window.render();
+        std::this_thread::sleep_for(std::chrono::milliseconds(18));
+    }
+    return 0;
+}
