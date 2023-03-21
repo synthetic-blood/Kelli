@@ -1,3 +1,0 @@
-#include"winuser.h"
-id ICON package.ico
-CREATEPROCESS_MANISFEST_RESOURCE_ID RT_MANIFEST "manisfest.xml"
